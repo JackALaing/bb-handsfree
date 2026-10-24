@@ -27,6 +27,7 @@ test("the actual app registers drawer surfaces only on mobile clients", async ()
       assert.ok(page);
       assert.equal(page.fixedTabs?.length ?? 0, mobile ? 1 : 0);
       assert.equal(app.threadPanelActions.some(action => action.id === "thread-workspace"), mobile);
+      assert.equal(app.appOverlays.filter(overlay => overlay.id === "presence-sync").length, 1, "one window-lifetime presence listener");
     }
     // The lifecycle script owns the display-only root attributes: it clears a
     // stale value on mount and removes them when the frontend generation ends.

@@ -17,6 +17,7 @@ import type { PluginNavPanelProps } from "@get-bb/plugin-sdk/app";
 import type { rpcContract } from "../server";
 import { clientDescriptor } from "../shared/client-identity";
 import { voiceAgent } from "../voice/agent";
+import { usePresenceSync } from "./presence-sync";
 import { LiveCallControls, MicIcon, WaveformIcon } from "./voice-chrome";
 import { viewWorkspace } from "../shared/view-workspace";
 import { actionStatus, pairToolEvents } from "../shared/session-events";
@@ -719,14 +720,8 @@ export function SessionsPanel({ subPath = "" }: Partial<PluginNavPanelProps> = {
 
   // Cross-surface presence: mirror a call owned by another realm so the console
   // reflects it, and relay stop/mute from the console back to the owning realm.
-  useRealtime("voice-presence", (payload) => voiceAgent.ingestPresence(payload));
-  useRealtime("voice-command", (payload) => voiceAgent.applyVoiceCommand(payload));
-  useRealtime("voice-presence-query", () => voiceAgent.answerPresenceQuery());
-
-  // Catch up the moment the page mounts (e.g. a realm rebuilt after navigating
-  // back) instead of waiting up to a heartbeat — this is the "shows Talk to Aide
-  // over a live call, then flips to Connected a few seconds later" gap.
-  useEffect(() => voiceAgent.requestPresence(), []);
+  // The window-lifetime overlay normally holds this; see presence-sync.tsx.
+  usePresenceSync();
 
   // Auto-follow the transcript: after opening it, or when new events land while
   // you're already reading the bottom, snap to the latest — but if you've

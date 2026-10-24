@@ -24,6 +24,7 @@ import { SessionsPanel } from "./ui/sessions-panel";
 import { viewWorkspace } from "./shared/view-workspace";
 import { COMPANION_TAB, CompanionTab, THREAD_WORKSPACE_ACTION } from "./ui/companion";
 import { AudioSettings, BehaviorSettings, ModelsSettings, ShortcutsSettings } from "./ui/settings-sections";
+import { PresenceSync, usePresenceSync } from "./ui/presence-sync";
 import { cn } from "@/lib/utils";
 import { AUDIO_DEVICE_STORAGE_KEY } from "./shared/audio-devices";
 import { MicIcon, StopIcon, WaveformIcon, useCallElapsed } from "./ui/voice-chrome";
@@ -82,13 +83,8 @@ function AideVoiceButton() {
 
   // Cross-surface presence: mirror a call owned by another realm so this pill
   // reflects it, and relay stop/mute back to whichever realm owns the call.
-  useRealtime("voice-presence", (payload) => voiceAgent.ingestPresence(payload));
-  useRealtime("voice-command", (payload) => voiceAgent.applyVoiceCommand(payload));
-  useRealtime("voice-presence-query", () => voiceAgent.answerPresenceQuery());
-
-  // Catch up immediately when this surface mounts (e.g. a realm rebuilt after
-  // navigation), rather than waiting up to a heartbeat to learn a call is live.
-  useEffect(() => voiceAgent.requestPresence(), []);
+  // The window-lifetime overlay normally holds this; see presence-sync.tsx.
+  usePresenceSync();
 
   // Thread-event notifications (digested; disabled via `notifications` setting).
   useRealtime("aide-thread-event", (payload) => {
@@ -422,6 +418,12 @@ export default definePluginApp((app) => {
     description: "Adds a persistent voice control bar above the thread list.",
     component: ThreadListWithVoiceBar,
   });
+  // One presence listener for the window's lifetime, so mirrored call state
+  // (and the root attributes below) stay current on routes with no composer or
+  // Handsfree page. Feature-detected: older hosts keep the surface fallback.
+  if (typeof app.slots.experimental_appOverlay === "function") {
+    app.slots.experimental_appOverlay({ id: "presence-sync", component: PresenceSync });
+  }
   // The session deliberately outlives any component, so tie it to the plugin
   // frontend generation instead: on reload/disable the old bundle's singleton
   // would otherwise keep a zombie WebRTC call no button controls.
