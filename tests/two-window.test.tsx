@@ -266,3 +266,32 @@ test("a sidebar start superseded during the exchange closes its connection and e
     assert.equal(reply.conflict.nonce, "phone", "only the phone call remains in the ledger");
   } finally { b.close(); await server.dispose(); }
 });
+
+test("Take over ends a live owner that is still mounted, and only the newest call survives", async () => {
+  const server = await backend();
+  const a = openWindow(await loadWindow("survivor-a"), server.rpc);
+  try {
+    await settle();
+    fireEvent.click(a.page.getByRole("button", { name: "Start Aide voice agent" }));
+    await settle(); await server.deliver(a.slots); await settle();
+    const callA = a.frontend.voiceAgent.getSessionId()!;
+    assert.equal(a.frontend.voiceAgent.getState(), "live");
+    server.skip();
+    const b = openWindow(await loadWindow("survivor-b"), server.rpc, "start");
+    try {
+      await settle(); server.skip(); await settle(); // B hears nothing: blocked
+      assert.equal(notice(b), "A call is active elsewhere.Take overEnd it");
+      fireEvent.click(b.page.getByRole("button", { name: "Take over" }));
+      await settle();
+      const callB = b.frontend.voiceAgent.getSessionId()!;
+      assert.notEqual(callB, callA);
+      await server.deliver([...a.slots, ...b.slots]); await settle();
+      assert.equal(a.frontend.voiceAgent.getState() === "live" && a.frontend.voiceAgent.getSessionId() === callA, false, "A's own call ended");
+      assert.equal(peers.filter(peer => !peer.closed).length, 1, "exactly one open connection remains");
+      assert.equal(b.frontend.voiceAgent.getState(), "live");
+      await settle(); await server.deliver([...a.slots, ...b.slots]); await settle();
+      const reply = await server.rpc.reserveCall({ nonce: "later" }) as { conflict: { nonce: string } };
+      assert.equal(reply.conflict.nonce, callB, "the ledger holds only the surviving call");
+    } finally { b.close(); }
+  } finally { a.close(); await server.dispose(); }
+});

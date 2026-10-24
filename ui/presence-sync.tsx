@@ -1,9 +1,9 @@
 // Cross-realm presence input for this realm's voiceAgent.
 //
-// Every surface that shows call state needs the realm's voiceAgent to hear
-// `voice-presence` (mirror a remote call), `voice-command` (act on relayed
-// stop/mute when this realm owns the call) and `voice-presence-query` (answer a
-// peer's catch-up request). Historically only the composer button and the
+// Every realm needs its voiceAgent to hear `voice-call` (another start ends
+// this realm's call), `voice-mute` (CLI mute), `voice-presence` (mirror a
+// remote call), `voice-command` (act on relayed stop/mute when this realm owns
+// the call) and `voice-presence-query` (answer a peer's catch-up request). Historically only the composer button and the
 // Handsfree page subscribed, so on any other route remote transitions were
 // lost and the sidebar/root state went stale.
 //
@@ -31,6 +31,16 @@ export function usePresenceSync() {
   // holder's RPC client whenever no surface has bound the agent.
   useEffect(() => voiceAgent.providePresenceRpc(rpc), [rpc]);
   const holding = () => holders[0] === token;
+  // Global exclusivity: when any window starts a call, every other one stops.
+  useRealtime("voice-call", (payload) => {
+    const nonce = (payload as { nonce?: unknown } | null)?.nonce;
+    if (holding() && typeof nonce === "string") voiceAgent.onCallStarted(nonce);
+  });
+  // CLI mute control: bb handsfree mute|unmute broadcasts on this channel.
+  useRealtime("voice-mute", (payload) => {
+    const muted = (payload as { muted?: unknown } | null)?.muted;
+    if (holding() && typeof muted === "boolean") voiceAgent.setMuted(muted);
+  });
   useRealtime("voice-presence", (payload) => { if (holding()) voiceAgent.ingestPresence(payload); });
   useRealtime("voice-command", (payload) => { if (holding()) voiceAgent.applyVoiceCommand(payload); });
   useRealtime("voice-presence-query", () => { if (holding()) voiceAgent.answerPresenceQuery(); });

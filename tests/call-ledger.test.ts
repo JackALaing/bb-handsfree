@@ -129,3 +129,18 @@ test("a reserved call that keeps its reservation starts and announces once", asy
     assert.deepEqual(h.voiceCalls(), ["sidebar"]);
   } finally { await h.dispose(); }
 });
+
+test("a call that cannot be recorded is not started, so a restart cannot read the ledger as empty", async () => {
+  const h = await host();
+  try {
+    const db = h.bb.storage.database();
+    db.prepare("CREATE TRIGGER block_active_calls BEFORE INSERT ON active_calls BEGIN SELECT RAISE(ABORT, 'blocked'); END").run();
+    await assert.rejects(h.createCall("manual"), /Could not record the call/);
+    assert.equal(h.fetches(), 0, "no paid exchange");
+    assert.deepEqual(h.voiceCalls(), [], "nothing was ended");
+    db.prepare("DROP TRIGGER block_active_calls").run();
+    const next = await h.harness.lifecycle.reload(plugin);
+    // No call ran, so an empty ledger after the restart is the truth.
+    assert.deepEqual(await next.harness.behavior.callRpc("reserveCall" as never, { nonce: "new" } as never), { ok: true, conflict: null });
+  } finally { await h.dispose(); }
+});

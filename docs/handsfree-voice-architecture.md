@@ -82,7 +82,12 @@ an `active_calls` SQLite table of every call not yet positively ended
   and again before announcing `voice-call`; otherwise it fails with "Another
   call started first." and the client closes its connection without applying
   the answer.
-- Explicit Start remains unreserved and keeps takeover semantics.
+- Explicit Start remains unreserved and keeps takeover semantics, but any
+  `createCall` whose nonce cannot be durably recorded fails before the paid
+  exchange, so the ledger never misses a running call it accepted.
+- `voice-call` (exclusivity), `voice-mute`, presence, commands and queries are
+  all held by the single window-lifetime presence holder (`ui/presence-sync.tsx`),
+  so a call owned by the Handsfree page or any other surface stops on takeover.
 
 Remaining gap: if a durable ledger write fails and the backend restarts before
 the owner's next heartbeat, that call is missing from the restored ledger.

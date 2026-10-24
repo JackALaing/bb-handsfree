@@ -69,20 +69,9 @@ function AideVoiceButton() {
   const toggleHint = shortcutLabel(shortcuts.toggle, MAC);
   const muteHint = shortcutLabel(shortcuts.mute, MAC);
 
-  // Global exclusivity: when any window starts a call, all others stop theirs.
-  useRealtime("voice-call", (payload) => {
-    const nonce = (payload as { nonce?: unknown } | null)?.nonce;
-    if (typeof nonce === "string") voiceAgent.onCallStarted(nonce);
-  });
-
-  // CLI mute control: bb handsfree mute|unmute broadcasts on this channel.
-  useRealtime("voice-mute", (payload) => {
-    const muted = (payload as { muted?: unknown } | null)?.muted;
-    if (typeof muted === "boolean") voiceAgent.setMuted(muted);
-  });
-
   // Cross-surface presence: mirror a call owned by another realm so this pill
   // reflects it, and relay stop/mute back to whichever realm owns the call.
+  // Exclusivity (voice-call) and CLI mute ride the same single holder.
   // The window-lifetime overlay normally holds this; see presence-sync.tsx.
   usePresenceSync();
 
