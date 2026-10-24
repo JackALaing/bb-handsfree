@@ -67,6 +67,14 @@ A voice session is shared across all your bb windows and devices: the sidebar
 shows a live voice bar (with which device the session came through), and any
 window can pick it up or stop it.
 
+For host chrome styled by other plugins, the frontend mirrors this client's
+call state onto `<html>`: `data-handsfree-voice` is `connecting`, `live` or
+`muted` (absent when idle), and `data-handsfree-voice-activity` is `you` or
+`aide` while someone has the floor. Activity is tracked only by the window that
+owns the call, and `you` is never set while muted or while the mic is paused.
+These attributes are display-only. `/plugins/handsfree/sessions/live` opens the
+Handsfree page on the active call's transcript.
+
 ## Mobile views beside the call
 
 On mobile, “show that thread” opens a drawer without leaving the voice call.

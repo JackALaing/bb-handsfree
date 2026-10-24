@@ -9,9 +9,11 @@ import {
   experimental_useAppPanel,
   experimental_useSidebarThreadActions,
   useBbContext,
+  useBbNavigate,
   useRealtime,
   useRpc,
 } from "@get-bb/plugin-sdk/app";
+import type { PluginNavPanelProps } from "@get-bb/plugin-sdk/app";
 import type { rpcContract } from "../server";
 import { clientDescriptor } from "../shared/client-identity";
 import { voiceAgent } from "../voice/agent";
@@ -19,6 +21,7 @@ import { LiveCallControls, MicIcon, WaveformIcon } from "./voice-chrome";
 import { viewWorkspace } from "../shared/view-workspace";
 import { actionStatus, pairToolEvents } from "../shared/session-events";
 import { COMPANION_TAB } from "./companion";
+import { LIVE_TRANSCRIPT_SUBPATH } from "../voice/dom-state";
 import { cn } from "@/lib/utils";
 
 interface DeviceInfo {
@@ -576,8 +579,9 @@ function useEscapeToClose() {
   }, []);
 }
 
-export function SessionsPanel() {
+export function SessionsPanel({ subPath = "" }: Partial<PluginNavPanelProps> = {}) {
   const rpc = useRpc<typeof rpcContract>();
+  const navigate = useBbNavigate();
   const { threadId, projectId } = useBbContext();
   const sidebarActions = experimental_useSidebarThreadActions();
   const appPanel = experimental_useAppPanel();
@@ -690,6 +694,15 @@ export function SessionsPanel() {
       () => undefined,
     );
   }, [rpc]);
+  // `/plugins/handsfree/sessions/live` opens the active call's transcript once
+  // its session id is known (a mirrored call arrives with the presence reply),
+  // then drops the subpath so Back and later visits behave normally.
+  useEffect(() => {
+    if (subPath !== LIVE_TRANSCRIPT_SUBPATH || !activeSessionId) return;
+    setSelected(activeSessionId);
+    navigate.toPluginPanel("sessions", { replace: true });
+  }, [subPath, activeSessionId, navigate]);
+
   useEffect(() => {
     if (selected) {
       pendingBottom.current = true;

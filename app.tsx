@@ -29,6 +29,7 @@ import { AUDIO_DEVICE_STORAGE_KEY } from "./shared/audio-devices";
 import { MicIcon, StopIcon, WaveformIcon, useCallElapsed } from "./ui/voice-chrome";
 import { matchShortcut, shortcutLabel } from "./shared/shortcuts";
 import { MAC, SHORTCUT_STORAGE_KEY, shortcutStore, useShortcutSync, useShortcuts } from "./shared/shortcut-store";
+import { publishVoiceState } from "./voice/dom-state";
 import "./app.css";
 
 function AideVoiceButton() {
@@ -447,8 +448,11 @@ export default definePluginApp((app) => {
       // a hard reload (Cmd+R) leaves the previous page holding the input device,
       // so the fresh page enumerates zero microphones until the OS reclaims it.
       window.addEventListener("pagehide", () => voiceAgent.stop(), { signal });
-      signal.addEventListener("abort", () => voiceAgent.stop());
-      return () => voiceAgent.stop();
+      // Display-only call state on <html> for host chrome styled by other plugins.
+      const unpublish = publishVoiceState(document.documentElement, voiceAgent);
+      const dispose = () => { voiceAgent.stop(); unpublish(); };
+      signal.addEventListener("abort", dispose);
+      return dispose;
     },
   });
 });
