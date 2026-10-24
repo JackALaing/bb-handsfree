@@ -314,6 +314,41 @@ test("start_thread preserves project provider and model defaults when no overrid
   } finally { await harness.lifecycle.dispose(); }
 });
 
+test("built-in prompt and start_thread guidance agree on prompt synthesis and machine choice", async () => {
+  const { bb, harness } = createFakePluginHost({ pluginId: "handsfree" });
+  try {
+    await plugin(bb);
+    const { defaultContent } = await harness.behavior.callRpc("getPrompt", null) as { defaultContent: string };
+    const startThread = toolSchemas().find(tool => tool.name === "start_thread") as any;
+    const promptParam = startThread.parameters.properties.prompt.description;
+    assert.doesNotMatch(defaultContent, /Never invent prompts/);
+    assert.match(defaultContent, /Compose prompts, titles, and messages faithfully from the user's explicit request and relevant conversation context/);
+    assert.match(defaultContent, /do not invent facts, expand scope or add commitments/);
+    assert.match(defaultContent, /Ask one short question only when missing information materially changes the action/);
+    for (const guidance of [defaultContent, promptParam]) assert.match(guidance, /exact words only when they ask/);
+    for (const guidance of [defaultContent, startThread.description, promptParam]) {
+      assert.doesNotMatch(guidance, /dictated/);
+      assert.doesNotMatch(guidance, /several connected machines/);
+    }
+    for (const guidance of [defaultContent, startThread.description]) {
+      assert.match(guidance, /only when there is no usable default or the choice materially affects the task/);
+    }
+  } finally { await harness.lifecycle.dispose(); }
+});
+
+test("a saved custom prompt stays active when the built-in default changes", async () => {
+  const { bb, harness } = createFakePluginHost({ pluginId: "handsfree" });
+  const custom = "You are Aide. Never invent prompts, titles, or messages on the user's behalf.";
+  try {
+    await plugin(bb);
+    await harness.behavior.callRpc("setPrompt", { content: custom, source: "user", note: null });
+    const prompt = await harness.behavior.callRpc("getPrompt", null) as { content: string; defaultContent: string };
+    assert.equal(prompt.content, custom);
+    assert.notEqual(prompt.defaultContent, custom);
+    assert.match(prompt.defaultContent, /Compose prompts, titles, and messages faithfully/);
+  } finally { await harness.lifecycle.dispose(); }
+});
+
 test("start_thread passes a synthesized prompt unchanged and uses the project default machine", async () => {
   const captured: { spawned?: Record<string, unknown> } = {};
   const { bb, harness } = createFakePluginHost({ pluginId: "handsfree", sdk: {
