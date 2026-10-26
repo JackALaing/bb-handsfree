@@ -13,6 +13,12 @@ export const VOICE_STATE_ATTR = "data-handsfree-voice";
 export const VOICE_ACTIVITY_ATTR = "data-handsfree-voice-activity";
 /** Deep-link subpath of the Handsfree page that opens the live transcript. */
 export const LIVE_TRANSCRIPT_SUBPATH = "live";
+/**
+ * Deep-link subpath that starts a call only if the backend ledger confirms none
+ * is active (startIfIdle), and otherwise opens the call in the way. The sidebar
+ * Voice chat shortcut uses this; it never takes over a call.
+ */
+export const START_IF_IDLE_SUBPATH = "start";
 
 export interface VoiceStateSource {
   subscribe(listener: () => void): () => void;

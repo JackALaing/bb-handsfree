@@ -63,6 +63,30 @@ surface "broadcasts" by calling an RPC that publishes.
 Coarse only: who's-speaking isn't broadcast (too chatty); it shows on the owner
 surface.
 
+## Call ledger (start-if-idle)
+
+Presence is advisory: a fresh realm sees "idle" until an owner answers, and an
+unanswered query proves nothing. Every call passes through the backend's
+`createCall`, and the backend is single-threaded, so it keeps the authority:
+an `active_calls` SQLite table of every call not yet positively ended
+(`server/call-ledger.ts`).
+
+- Added by `reserveCall`, by unreserved `createCall`, and by any non-idle
+  presence (so a surviving second call is tracked too).
+- Removed only by idle presence, a `session.stopped` event, `forceStop`, or
+  `releaseCall`. Heartbeat age never removes an entry.
+- Entries restored after a backend restart report `unknown` until renewed.
+  A ledger read or write failure disables reservations for that process.
+- `reserveCall` succeeds only when the ledger is empty. A reserved
+  `createCall` re-checks that it is the sole entry before the paid exchange
+  and again before announcing `voice-call`; otherwise it fails with "Another
+  call started first." and the client closes its connection without applying
+  the answer.
+- Explicit Start remains unreserved and keeps takeover semantics.
+
+Remaining gap: if a durable ledger write fails and the backend restarts before
+the owner's next heartbeat, that call is missing from the restored ledger.
+
 ## Client, device, and realtime scope
 
 `bb.realtime.publish` reaches "every connected client" of one plugin backend —

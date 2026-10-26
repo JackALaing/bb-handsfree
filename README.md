@@ -75,6 +75,17 @@ owns the call, and `you` is never set while muted or while the mic is paused.
 These attributes are display-only. `/plugins/handsfree/sessions/live` opens the
 Handsfree page on the active call's transcript.
 
+`/plugins/handsfree/sessions/start` starts a call only if none is active: the
+backend keeps a ledger of every call not yet positively ended (idle presence,
+`session.stopped`, End, or a released reservation) and grants a reservation
+only while it is empty. If a call is in the way, the page opens its transcript
+when it is known, and offers **Take over** or **End it** when it is not (for
+example after a backend restart, or when its owner vanished without ending).
+Missing or late call status is never treated as idle. The ordinary Start
+buttons are unchanged: they take over any other call, so pressing one in a
+window that has not yet heard about a call elsewhere (up to one ~10 s presence
+heartbeat after the window opens) ends that call.
+
 ## Mobile views beside the call
 
 On mobile, “show that thread” opens a drawer without leaving the voice call.

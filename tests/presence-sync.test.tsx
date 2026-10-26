@@ -77,3 +77,26 @@ test("a surface falls back to holding presence when no overlay is mounted", asyn
     page.lifecycle.unmount();
   }
 });
+
+test("an owner with no surface bound still answers queries and heartbeats through the overlay", async () => {
+  const published: unknown[] = [];
+  const overlay = renderSlot({ component: PresenceSync }, {}, { rpc: { ...rpc, publishPresence: (input: unknown) => { published.push(input); return { ok: true }; } } as never });
+  const agent = voiceAgent as unknown as { state: string; nonce: string | null; bindings: unknown };
+  try {
+    assert.equal(agent.bindings, null);
+    // Model an existing local call without audio or a paid call.
+    agent.state = "live"; agent.nonce = "owned-off-page";
+    await overlay.behavior.emitRealtime("voice-presence-query", {});
+    await new Promise(resolve => setTimeout(resolve, 0));
+    assert.equal(published.length, 1, "query reply is published off-page");
+    assert.equal((published[0] as { nonce: string }).nonce, "owned-off-page");
+  } finally {
+    agent.state = "idle"; agent.nonce = null;
+    overlay.lifecycle.unmount();
+  }
+  // Released with the overlay: nothing is published without a transport.
+  agent.state = "live"; agent.nonce = "owned-off-page";
+  try { voiceAgent.answerPresenceQuery(); } finally { agent.state = "idle"; agent.nonce = null; }
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(published.length, 1);
+});

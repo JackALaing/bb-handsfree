@@ -8,6 +8,8 @@ import { isLiveModel, liveVoice } from "../shared/models";
 import { toolSchemas, threadViewInstructions } from "./tools.ts";
 import type { ConfigStore } from "./config.ts";
 import type { Credentials, AuthMechanism } from "./credentials.ts";
+import { CALL_SUPERSEDED } from "../shared/call-reservation.ts";
+import type { CallLedger } from "./call-ledger.ts";
 
 const REALTIME_ENDPOINT = "https://api.openai.com/v1/realtime/calls";
 // GPT-Live (full-duplex) sessions use a different API surface: JSON body with
@@ -28,6 +30,8 @@ export interface CreateCallDeps {
   publish: BbPluginApi["realtime"]["publish"];
   /** Remember which auth mechanism the realtime family actually used. */
   rememberRealtimeAuth(mechanism: AuthMechanism): void;
+  /** Records every call this backend accepts (see call-ledger.ts). */
+  ledger: CallLedger;
 }
 
 export interface CreateCallInput {
@@ -37,12 +41,31 @@ export interface CreateCallInput {
   onNewThreadScreen?: boolean;
   nonce: string;
   mobile?: boolean;
+  /** Set by a reserved start (reserveCall); see the createCall RPC contract. */
+  reserved?: boolean;
 }
 
 export async function createCall(
   deps: CreateCallDeps,
-  { sdp, threadId, projectId, onNewThreadScreen, nonce, mobile = false }: CreateCallInput,
+  { sdp, threadId, projectId, onNewThreadScreen, nonce, mobile = false, reserved = false }: CreateCallInput,
 ): Promise<{ sdp: string; live: boolean }> {
+  // Before any credential lookup or paid exchange: a reserved start that lost
+  // its reservation (another Start, or released) must not proceed.
+  if (reserved) {
+    if (!deps.ledger.held(nonce)) throw new Error(CALL_SUPERSEDED);
+  } else if (!deps.ledger.reserve(nonce)) {
+    // An unrecorded call would let a later reservation, possibly after a
+    // backend restart, treat the ledger as empty while this call runs.
+    throw new Error("Could not record the call, so it was not started. Try again.");
+  }
+  // After the exchange, before this call ends every other one.
+  const announce = () => {
+    if (reserved && !deps.ledger.held(nonce)) {
+      deps.log.info(`reserved call ${nonce} superseded during exchange; not announced`);
+      throw new Error(CALL_SUPERSEDED);
+    }
+    deps.publish("voice-call", { nonce });
+  };
   const { model, voice } = await deps.readConfig();
   const { key, mechanism } = await deps.apiKey({ requireKey: isLiveModel(model) });
   const pluginCommands = await deps.exposedPluginCommands();
@@ -96,7 +119,7 @@ export async function createCall(
       throw new Error("OpenAI live session returned no SDP answer");
     }
     deps.log.info(`live session created: ${liveSessionId ?? "(no id)"}`);
-    deps.publish("voice-call", { nonce });
+    announce();
     return { sdp: answer, live: true };
   }
 
@@ -140,6 +163,6 @@ export async function createCall(
   // Remember which auth mechanism the realtime family actually used, so
   // moving to gpt-live-1 (key-forced) and back restores this default.
   deps.rememberRealtimeAuth(mechanism);
-  deps.publish("voice-call", { nonce });
+  announce();
   return { sdp: text, live: false };
 }

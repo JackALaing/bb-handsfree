@@ -12,6 +12,8 @@
 // composer button and page keep calling `usePresenceSync()` as a fallback for
 // hosts without app overlays; only one holder per realm acts on each event,
 // so the overlay and a surface never apply or answer the same event twice.
+// Each holder also lends its RPC client as the realm's outgoing presence
+// transport, so an owner's heartbeats and query replies continue off-page.
 import { useEffect, useRef } from "react";
 import { useRealtime, useRpc } from "@get-bb/plugin-sdk/app";
 import type { rpcContract } from "../server";
@@ -25,6 +27,9 @@ export function presenceHolderCount() { return holders.length; }
 export function usePresenceSync() {
   const rpc = useRpc<typeof rpcContract>();
   const token = useRef<symbol>(Symbol("presence-holder")).current;
+  // Outgoing presence (heartbeats, query replies, relayed commands) uses this
+  // holder's RPC client whenever no surface has bound the agent.
+  useEffect(() => voiceAgent.providePresenceRpc(rpc), [rpc]);
   const holding = () => holders[0] === token;
   useRealtime("voice-presence", (payload) => { if (holding()) voiceAgent.ingestPresence(payload); });
   useRealtime("voice-command", (payload) => { if (holding()) voiceAgent.applyVoiceCommand(payload); });
