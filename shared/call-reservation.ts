@@ -1,10 +1,12 @@
 // Shared between the backend call ledger (server/call-ledger.ts) and the voice agent.
 //
-// The backend is the only place every call passes through (createCall), and it
-// is single-threaded, so it is the one authority that can say "no call is
-// active". The ledger holds every non-idle call nonce until positive end
-// evidence (idle presence, session.stopped, forceStop, or an explicit release)
-// removes it. Missing or late evidence is "unknown", never idle.
+// Every call passes through one backend (createCall), and it is
+// single-threaded, so it is where calls are tracked. The ledger holds every
+// non-idle call nonce until it is removed by end evidence from the owner (idle
+// presence, session.stopped), by an explicit End (forceStop: an override that
+// stops on a best-effort basis, without the owner's confirmation), or by the
+// release of a reservation whose start was abandoned. Missing or late evidence
+// is "unknown", never idle.
 
 /** Reported phase of a ledger entry that blocks a reserved start. */
 export type CallLedgerPhase =

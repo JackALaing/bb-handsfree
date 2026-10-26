@@ -312,11 +312,13 @@ export const rpcContract = defineRpcContract({
     }).strict(),
   },
   /**
-   * End a call authoritatively, without needing its owner realm to act — the
-   * owner may be a frozen, backgrounded mobile webview that can no longer receive
-   * commands. Marks the session stopped (so the list stops showing it live) and
-   * broadcasts idle + a stop so every surface clears and the owner tears down if
-   * it ever thaws. This is what makes stop reliable against the navigation zombie.
+   * End a call without needing its owner realm to act — the owner may be a
+   * frozen, backgrounded mobile webview that can no longer receive commands.
+   * Clears the call ledger, marks the session stopped (so the list stops showing
+   * it live) and broadcasts idle + a best-effort stop so every surface clears and
+   * the owner tears down if it receives it. It does not close the peer
+   * connection or wait for the owner: an unreachable owner may keep running,
+   * and its next heartbeat re-adds it to the ledger.
    */
   forceStop: {
     input: z.object({ nonce: z.string().min(1) }).strict(),
@@ -641,6 +643,7 @@ export default async function plugin(bb: BbPluginApi) {
       return { views, preference: (await readConfig()).mobileViewBehavior };
     },
     async forceStop({ nonce }) {
+      // An explicit override, not evidence the call ended (see the contract).
       ledger.end(nonce);
       // Durable end-marker so listSessions stops showing it live even if the
       // owner realm never logs its own session.stopped (count > 0 is enough).

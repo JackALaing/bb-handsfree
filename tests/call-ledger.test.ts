@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import { createFakePluginHost } from "@get-bb/plugin-sdk/testing";
 import plugin from "../server.ts";
 import { CALL_SUPERSEDED } from "../shared/call-reservation.ts";
+import { createCall as createCallDirect } from "../server/realtime-call.ts";
 
 type Reply = { ok: boolean; conflict: { nonce: string | null; phase: string } | null };
 
@@ -144,3 +145,47 @@ test("a call that cannot be recorded is not started, so a restart cannot read th
     assert.deepEqual(await next.harness.behavior.callRpc("reserveCall" as never, { nonce: "new" } as never), { ok: true, conflict: null });
   } finally { await h.dispose(); }
 });
+
+// The reservation can be lost while createCall awaits its setup (config,
+// credentials, plugin catalog). No exchange may follow, on either API.
+for (const model of ["gpt-realtime", "gpt-live-1"]) {
+  for (const stage of ["readConfig", "apiKey", "exposedPluginCommands", null] as const) {
+    const name = stage
+      ? `a reservation lost during ${stage} makes no ${model} exchange`
+      : `a reservation kept through setup makes one ${model} exchange`;
+    test(name, async () => {
+      let held = true;
+      let fetches = 0;
+      const lose = (at: string) => { if (at === stage) held = false; };
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = (async () => {
+        fetches += 1;
+        const body = model === "gpt-live-1" ? JSON.stringify({ session: { id: "s" }, transport: { sdp: "answer" } }) : "answer";
+        return new Response(body, { status: 200 });
+      }) as typeof fetch;
+      const published: string[] = [];
+      const deps = {
+        ledger: { held: () => held, reserve: () => true },
+        readConfig: async () => { await Promise.resolve(); lose("readConfig"); return { model, voice: "marin" }; },
+        apiKey: async () => { await Promise.resolve(); lose("apiKey"); return { key: "test-key", mechanism: "key" }; },
+        exposedPluginCommands: async () => { await Promise.resolve(); lose("exposedPluginCommands"); return []; },
+        activePrompt: () => "",
+        log: { info() {}, error() {} },
+        publish: (channel: string) => { published.push(channel); },
+        rememberRealtimeAuth() {},
+      } as never;
+      try {
+        const run = createCallDirect(deps, { sdp: "offer", threadId: null, projectId: null, nonce: "n", reserved: true });
+        if (stage) {
+          await assert.rejects(run, new RegExp(CALL_SUPERSEDED));
+          assert.equal(fetches, 0, "no exchange after the reservation was lost");
+          assert.deepEqual(published, []);
+        } else {
+          await run;
+          assert.equal(fetches, 1);
+          assert.deepEqual(published, ["voice-call"]);
+        }
+      } finally { globalThis.fetch = originalFetch; }
+    });
+  }
+}

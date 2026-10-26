@@ -58,6 +58,15 @@ export async function createCall(
     // backend restart, treat the ledger as empty while this call runs.
     throw new Error("Could not record the call, so it was not started. Try again.");
   }
+  // Setup below awaits config, credentials and the plugin catalog, and the
+  // reservation can be lost during any of them. Call this with no await
+  // between it and the fetch, so a lost reservation never reaches the exchange.
+  const ensureHeldBeforeExchange = () => {
+    if (reserved && !deps.ledger.held(nonce)) {
+      deps.log.info(`reserved call ${nonce} superseded during setup; no exchange`);
+      throw new Error(CALL_SUPERSEDED);
+    }
+  };
   // After the exchange, before this call ends every other one.
   const announce = () => {
     if (reserved && !deps.ledger.held(nonce)) {
@@ -95,6 +104,7 @@ export async function createCall(
         },
       },
     };
+    ensureHeldBeforeExchange();
     const response = await fetch(LIVE_ENDPOINT, {
       method: "POST",
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
@@ -148,6 +158,7 @@ export async function createCall(
   const form = new FormData();
   form.set("sdp", sdp);
   form.set("session", JSON.stringify(session));
+  ensureHeldBeforeExchange();
   const response = await fetch(REALTIME_ENDPOINT, {
     method: "POST",
     headers: { Authorization: `Bearer ${key}` },

@@ -1,4 +1,4 @@
-// The call ledger: every call nonce not yet positively ended, in the plugin's
+// The call ledger: every call nonce not yet ended or explicitly cleared, in the plugin's
 // SQLite database (table `active_calls`, see store.ts MIGRATIONS). Writes are
 // synchronous, so each change is durable and serialized before the next RPC
 // runs. Entries restored from a previous backend process report "unknown"
@@ -13,7 +13,7 @@ export interface CallLedger {
   set(nonce: string, phase: CallLedgerPhase): boolean;
   /** Record a start without downgrading a phase its owner already reported. */
   reserve(nonce: string): boolean;
-  /** Remove a positively ended (or released) call. */
+  /** Remove a call that ended, was force-stopped, or whose reservation was released. */
   end(nonce: string): boolean;
   /** The blocking entry for `nonce`, or null when it is the sole entry. */
   conflict(nonce: string): CallConflict | null;

@@ -100,3 +100,28 @@ test("an owner with no surface bound still answers queries and heartbeats throug
   await new Promise(resolve => setTimeout(resolve, 0));
   assert.equal(published.length, 1);
 });
+
+test("holders that share one RPC client release only their own registration", async () => {
+  const published: unknown[] = [];
+  // One client object, as useRpc returns within a slot environment.
+  const shared = { call: async (method: string, input: unknown) => { if (method === "publishPresence") published.push(input); return { ok: true }; } } as never;
+  const agent = voiceAgent as unknown as { state: string; nonce: string | null; bindings: unknown };
+  const releaseFirst = voiceAgent.providePresenceRpc(shared);
+  const releaseSecond = voiceAgent.providePresenceRpc(shared);
+  const answer = async () => {
+    agent.state = "live"; agent.nonce = "owned-off-page";
+    try { voiceAgent.answerPresenceQuery(); } finally { agent.state = "idle"; agent.nonce = null; }
+    await new Promise(resolve => setTimeout(resolve, 0));
+  };
+  try {
+    assert.equal(agent.bindings, null);
+    releaseFirst();
+    releaseFirst(); // idempotent: must not remove the second registration
+    await answer();
+    assert.equal(published.length, 1, "the remaining holder still has a transport");
+  } finally {
+    releaseSecond();
+  }
+  await answer();
+  assert.equal(published.length, 1, "the last release removes the transport");
+});

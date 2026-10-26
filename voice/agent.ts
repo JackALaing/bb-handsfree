@@ -101,7 +101,7 @@ export class VoiceAgent {
    * its call on routes with no composer or Handsfree page bound. Starting a
    * call and running tools still require `bindings`.
    */
-  private presenceRpcs: RpcClient[] = [];
+  private presenceRpcs: { rpc: RpcClient }[] = [];
   private nonce: string | null = null;
   private storage = browserStorage();
   private audioPreferences: AudioDevicePreferences =
@@ -280,12 +280,15 @@ export class VoiceAgent {
 
   /** Supply a presence transport for this realm; returns its release. */
   providePresenceRpc(rpc: RpcClient): () => void {
-    this.presenceRpcs.push(rpc);
-    return () => { this.presenceRpcs = this.presenceRpcs.filter(item => item !== rpc); };
+    // One entry per registration: holders may share one RPC client, and each
+    // release must remove only its own entry. Releasing twice is a no-op.
+    const registration = { rpc };
+    this.presenceRpcs.push(registration);
+    return () => { this.presenceRpcs = this.presenceRpcs.filter(item => item !== registration); };
   }
 
   private presenceRpc(): RpcClient | null {
-    return this.bindings?.rpc ?? this.presenceRpcs[0] ?? null;
+    return this.bindings?.rpc ?? this.presenceRpcs[0]?.rpc ?? null;
   }
 
   bind(bindings: Bindings) { return this.registerBindings(bindings, false); }
